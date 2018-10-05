@@ -4,25 +4,23 @@
 #define BUFFER_SIZE 100
 
 typedef enum {
-  INIT = 0,
-  REV_P_F,
-  REV_E,
-  REV_N,
-  REV_F1,
-  REV_SECUR_ON,
-  REV_SECUR_OFF,
+  RECEIVING,
+  ACK,
 } State;
 
 State state;
 char temp;
 bool led_state;
-int idx;
+char buff[BUFFER_SIZE];
+String on_ack = "open#";
+String off_ack = "off#";
+
 void setup() {
   Serial.begin(9600);
-  state = INIT;
+  state = RECEIVING;
   pinMode(LED, OUTPUT);
   led_state = 1;
-  idx = 0;
+  strcpy(buff, "") ;
   digitalWrite(LED, led_state);
 }
 
@@ -37,83 +35,43 @@ bool is_time_out(unsigned long time_begin) {
 unsigned long time_begin;
 
 void loop() {
-  if (Serial.available()) {
-     temp = Serial.read();
-     
-    switch (state) {
-      case INIT:
-        if (temp == 'O' || temp == 'o') {
-          state = REV_P_F;
-          time_begin = millis();
+  switch (state) {
+    case RECEIVING:
+      if (is_time_out(time_begin)) {
+        time_begin = millis();
+        strcpy(buff, "");
+      }
+      if (Serial.available()) {
+        temp = Serial.read();
+        strcat(buff, &temp);
+        time_begin = millis();
+        if (temp == '#') {
+          state = ACK;
         }
-        break;
-      case REV_P_F:
-        if (is_time_out(time_begin))
-          state = INIT;
-        else if (temp == 'P' || temp == 'p') {
-          state = REV_E;
-          time_begin = millis();
-        }
-        else if (temp == 'F' || temp == 'f') {
-          state = REV_F1;
-          time_begin = millis();
-          
-        }
-        else  state = INIT;
-        break;
-      case REV_E:
-        if (is_time_out(time_begin)) {
-          state = INIT;
-        }
-        else if (temp == 'E' || temp == 'e') {
-          state = REV_N;
-          time_begin = millis();
-        }
-        else state = INIT;
-        break;
-      case REV_N:
-        if (is_time_out(time_begin)) {
-          state = INIT;
-        }
-        else if (temp == 'N' || temp == 'n') {
-          state = REV_SECUR_ON;
-          time_begin = millis();
-        }
-        else  state = INIT;
-        break;
-      case REV_F1:
-        if (is_time_out(time_begin)) {
-          state = INIT;
-        }
-        else if (temp == 'F' || temp == 'f') {
-          state = REV_SECUR_OFF;
-          time_begin = millis();
-        }
-        else  state = INIT;
-        break;
-      case REV_SECUR_ON:
-        if (is_time_out(time_begin)) {
-          state = INIT;
-        }
-        else if (temp == '#') {
-          state = INIT;
-          led_state = 0;
-          digitalWrite(LED, led_state);
-        }
-        state = INIT;
-        break;
-      case REV_SECUR_OFF:
-        if (is_time_out(time_begin)) {
-          state = INIT;
-        }
-        else if (temp == '#') {
-          led_state = 1;
-          digitalWrite(LED, led_state);
-        }
-        state = INIT;
-        break;
-      default:
-        break;
-    }
+      }
+      break;
+    case ACK:
+      if ((strcmp(&buff[strlen(buff) - 5], &on_ack[0])) == 0) {
+        led_state = 0;
+        digitalWrite(LED, led_state);
+        Serial.println("LED ON");
+        state = RECEIVING;
+      }
+      else if ((strcmp(&buff[strlen(buff) - 4], &off_ack[0])) == 0) {
+        led_state = 1;
+        digitalWrite(LED, led_state);
+        Serial.println("LED OFF");
+        state = RECEIVING;
+      }
+      else {
+        Serial.println("command fail");
+        Serial.println(&buff[strlen(buff) - 5]);
+        state = RECEIVING;
+        time_begin = millis();
+        strcpy(buff, "");
+      }
+      break;
+    default:
+      break;
   }
 }
